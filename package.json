@@ -1,0 +1,61 @@
+{
+  "name": "@mikkel-ol/federation-session",
+  "version": "22.0.0",
+  "description": "Angular Native Federation development sessions over YATSI",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "builders": "builders.json",
+  "schematics": "collection.json",
+  "generators": "collection.json",
+  "files": [
+    "dist",
+    "builders.json",
+    "collection.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc && node scripts/build-runtime.mjs && node scripts/copy-assets.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
+  },
+  "peerDependencies": {
+    "@angular-architects/native-federation": "^22.0.0",
+    "@angular-devkit/architect": "^0.2200.0",
+    "@angular-devkit/core": "~22.0.0",
+    "@angular-devkit/schematics": "~22.0.0",
+    "@angular/build": "~22.0.0",
+    "@schematics/angular": "~22.0.0"
+  },
+  "dependencies": {
+    "@mikkel-ol/yatsi": "^0.2.0",
+    "express": "^4.21.2",
+    "http-proxy": "^1.18.1",
+    "open": "^10.2.0",
+    "qrcode": "^1.5.4",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@angular-architects/native-federation": "^22.0.0",
+    "@angular-devkit/architect": "^0.2200.2",
+    "@angular-devkit/core": "~22.0.2",
+    "@angular-devkit/schematics": "~22.0.2",
+    "@angular/build": "~22.0.2",
+    "@mikkel-ol/yatsi": "file:../yatsi/packages/client",
+    "@schematics/angular": "~22.0.2",
+    "@types/express": "^5.0.0",
+    "@types/http-proxy": "^1.17.16",
+    "@types/node": "^22.15.0",
+    "@types/qrcode": "^1.5.5",
+    "esbuild": "^0.28.1",
+    "typescript": "~6.0.3"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Federation Session Remote",
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Native Federation dev-server target"
+    },
+    "sessionUrl": {
+      "type": "string",
+      "description": "Federation Session URL provided by the host"
+    },
+    "remoteName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "description": "Lowercase kebab-case Native Federation remote name"
+    }
+  },
+  "required": ["target", "remoteName", "sessionUrl"],
+  "additionalProperties": false
+}

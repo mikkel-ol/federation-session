@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "FederationSessionSetup",
+  "title": "Federation Session setup",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "Angular project to configure",
+      "$default": {
+        "$source": "argv",
+        "index": 0
+      }
+    },
+    "role": {
+      "type": "string",
+      "enum": ["host", "remote"],
+      "description": "Role of this application in a federation session",
+      "x-prompt": "Configure this application as a host or remote?"
+    },
+    "yatsiServerUrl": {
+      "type": "string",
+      "description": "YATSI server URL; required for hosts"
+    },
+    "remoteName": {
+      "type": "string",
+      "description": "Lowercase kebab-case remote name; defaults to the project name"
+    },
+    "component": {
+      "type": "string",
+      "description": "Root component path override"
+    },
+    "port": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 4200
+    },
+    "capacity": {
+      "type": "number",
+      "minimum": 1
+    },
+    "skipInstall": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": ["project", "role"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "role": {
+            "const": "host"
+          }
+        }
+      },
+      "then": {
+        "required": ["yatsiServerUrl"]
+      }
+    }
+  ]
+}

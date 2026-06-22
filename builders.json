@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "builders": {
+    "host": {
+      "implementation": "./dist/host/index.js",
+      "schema": "./dist/host/schema.json",
+      "description": "Start a public Native Federation development session"
+    },
+    "remote": {
+      "implementation": "./dist/remote/index.js",
+      "schema": "./dist/remote/schema.json",
+      "description": "Join a Native Federation development session"
+    }
+  }
+}

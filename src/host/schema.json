@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Federation Session Host",
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Native Federation dev-server target"
+    },
+    "yatsiServerUrl": {
+      "type": "string",
+      "description": "YATSI server URL including http or https"
+    },
+    "capacity": {
+      "type": "number",
+      "minimum": 1,
+      "default": 24
+    },
+    "gatewayPort": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0
+    },
+    "open": {
+      "type": "boolean",
+      "default": false
+    },
+    "panel": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show the session panel in the host browser"
+    }
+  },
+  "required": ["target", "yatsiServerUrl"],
+  "additionalProperties": false
+}
