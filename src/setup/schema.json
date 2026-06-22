@@ -41,7 +41,7 @@
       "default": false
     }
   },
-  "required": ["project", "role"],
+  "required": ["role"],
   "allOf": [
     {
       "if": {

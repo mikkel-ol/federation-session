@@ -10,7 +10,7 @@ import path from "node:path";
 import ts from "typescript";
 
 interface SetupOptions {
-  project: string;
+  project?: string;
   role: "host" | "remote";
   yatsiServerUrl?: string;
   remoteName?: string;
@@ -43,21 +43,31 @@ interface WorkspaceLocation {
 }
 
 export default function setup(options: SetupOptions): Rule {
-  validateOptions(options);
+  if (options.role === "host" && !options.yatsiServerUrl) {
+    throw new Error("yatsiServerUrl is required when role is host");
+  }
+
   const state: {
     location?: WorkspaceLocation;
+    projectName?: string;
     needsNativeFederation?: boolean;
   } = {};
 
   return chain([
     (tree) => {
-      state.location = locateProject(tree, options.project);
-      const project = readProject(tree, state.location, options.project);
+      const resolved = locateProject(tree, options.project);
+      state.location = resolved.location;
+      state.projectName = resolved.projectName;
+      const remoteName = options.remoteName ?? state.projectName;
+      if (options.role === "remote" && !isRemoteName(remoteName)) {
+        throw new Error("remoteName must be lowercase kebab-case");
+      }
+      const project = readProject(tree, state.location, state.projectName);
       assertRoleIsCompatible(project, options.role);
       assertStandalone(tree, project, options.component);
       state.needsNativeFederation = !isNativeFederationProject(tree, project);
       if (state.needsNativeFederation && state.location.kind === "nx") {
-        createNxWorkspaceAdapter(tree, state.location, options.project, project);
+        createNxWorkspaceAdapter(tree, state.location, state.projectName, project);
       }
       return tree;
     },
@@ -69,51 +79,66 @@ export default function setup(options: SetupOptions): Rule {
     (tree, context) =>
       state.needsNativeFederation
         ? externalSchematic("@angular-architects/native-federation", "init", {
-            project: options.project,
+            project: state.projectName,
             port: options.port ?? 4200,
             type: options.role,
           })(tree, context)
         : tree,
     (tree) => {
-      if (!state.location) throw new Error("Workspace location was not resolved");
+      if (!state.location || !state.projectName) throw new Error("Workspace location was not resolved");
       if (state.needsNativeFederation && state.location.kind === "nx") {
-        restoreNxWorkspace(tree, state.location, options.project);
+        restoreNxWorkspace(tree, state.location, state.projectName);
       }
-      configureProject(tree, state.location, options);
+      configureProject(tree, state.location, state.projectName, options);
       return tree;
     },
   ]);
 }
 
-function validateOptions(options: SetupOptions) {
-  if (options.role === "host" && !options.yatsiServerUrl) {
-    throw new Error("yatsiServerUrl is required when role is host");
-  }
-  const remoteName = options.remoteName ?? options.project;
-  if (options.role === "remote" && !isRemoteName(remoteName)) {
-    throw new Error("remoteName must be lowercase kebab-case");
-  }
-}
-
-function locateProject(tree: Tree, projectName: string): WorkspaceLocation {
+function locateProject(
+  tree: Tree,
+  projectName: string | undefined,
+): { location: WorkspaceLocation; projectName: string } {
   for (const workspacePath of ["angular.json", "workspace.json"]) {
     if (!tree.exists(workspacePath)) continue;
     const workspace = readJson(tree, workspacePath);
-    if (workspace.projects?.[projectName]) {
-      return { kind: "angular", path: workspacePath };
+    const projects: Record<string, unknown> = workspace.projects ?? {};
+    if (projectName) {
+      if (projects[projectName]) {
+        return { location: { kind: "angular", path: workspacePath }, projectName };
+      }
+    } else {
+      const names = Object.keys(projects);
+      if (names.length === 1) {
+        return { location: { kind: "angular", path: workspacePath }, projectName: names[0] };
+      }
+      if (names.length > 1) {
+        throw new Error(`Multiple projects found; specify --project: ${names.join(", ")}`);
+      }
     }
   }
 
-  let result: WorkspaceLocation | undefined;
+  const results: Array<{ location: WorkspaceLocation; projectName: string }> = [];
   tree.visit((filePath) => {
-    if (result || !filePath.endsWith("/project.json")) return;
+    if (!filePath.endsWith("/project.json")) return;
     const project = readJson(tree, filePath);
-    if (project.name === projectName) {
-      result = { kind: "nx", path: trimLeadingSlash(filePath) };
+    if (!projectName || project.name === projectName) {
+      results.push({
+        location: { kind: "nx", path: trimLeadingSlash(filePath) },
+        projectName: project.name as string,
+      });
     }
   });
-  if (!result) throw new Error(`Project '${projectName}' was not found`);
-  return result;
+
+  if (projectName) {
+    if (results.length === 1) return results[0];
+    throw new Error(`Project '${projectName}' was not found`);
+  }
+  if (results.length === 1) return results[0];
+  if (results.length > 1) {
+    throw new Error(`Multiple projects found; specify --project: ${results.map((r) => r.projectName).join(", ")}`);
+  }
+  throw new Error("No Angular project found");
 }
 
 function readProject(
@@ -217,9 +242,10 @@ function restoreNxWorkspace(
 function configureProject(
   tree: Tree,
   location: WorkspaceLocation,
+  projectName: string,
   options: SetupOptions,
 ) {
-  const project = readProject(tree, location, options.project);
+  const project = readProject(tree, location, projectName);
   const targets = targetsOf(project);
   const key = location.kind === "nx" ? "executor" : "builder";
   const sessionExecutor = `@mikkel-ol/federation-session:${options.role}`;
@@ -230,18 +256,18 @@ function configureProject(
       targets["serve-federation"] = targets.serve;
     }
     const executorOptions: Record<string, unknown> = {
-      target: `${options.project}:serve-federation`,
+      target: `${projectName}:serve-federation`,
     };
     if (options.role === "host") {
       executorOptions.yatsiServerUrl = options.yatsiServerUrl;
       if (options.capacity !== undefined) executorOptions.capacity = options.capacity;
     } else {
-      executorOptions.remoteName = options.remoteName ?? options.project;
+      executorOptions.remoteName = options.remoteName ?? projectName;
     }
     targets.serve = { [key]: sessionExecutor, options: executorOptions };
   }
 
-  writeProject(tree, location, options.project, project);
+  writeProject(tree, location, projectName, project);
   if (options.role === "host") addStageToRootComponent(tree, project, options.component);
   else ensureComponentExposure(tree, project, options.component);
 }
