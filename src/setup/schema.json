@@ -1,16 +1,12 @@
 {
-  "$schema": "http://json-schema.org/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "$id": "FederationSessionSetup",
   "title": "Federation Session setup",
   "type": "object",
   "properties": {
     "project": {
       "type": "string",
-      "description": "Angular project to configure",
-      "$default": {
-        "$source": "argv",
-        "index": 0
-      }
+      "description": "Angular project to configure"
     },
     "role": {
       "type": "string",

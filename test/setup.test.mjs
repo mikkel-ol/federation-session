@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,15 @@ const runner = () =>
     "@mikkel-ol/federation-session",
     path.join(root, "collection.json"),
   );
+
+test("declares project as a named setup option", () => {
+  const schema = JSON.parse(
+    readFileSync(path.join(root, "src/setup/schema.json"), "utf8"),
+  );
+
+  assert.equal(schema.properties.project.$default, undefined);
+  assert.deepEqual(schema.required, ["project", "role"]);
+});
 
 test("configures an existing Native Federation host and is idempotent", async () => {
   const tree = angularFixture({ nativeFederation: true });
@@ -29,10 +39,7 @@ test("configures an existing Native Federation host and is idempotent", async ()
     project.architect.serve.builder,
     "@mikkel-ol/federation-session:host",
   );
-  assert.equal(
-    project.architect.serve.options.target,
-    "demo:serve-federation",
-  );
+  assert.equal(project.architect.serve.options.target, "demo:serve-federation");
   assert.equal(
     project.architect["serve-federation"].builder,
     "@angular-architects/native-federation:build",
@@ -47,7 +54,10 @@ test("configures an existing Native Federation host and is idempotent", async ()
     ).length,
     2,
   );
-  assert.match(text(second, "src/app/app.component.ts"), /CUSTOM_ELEMENTS_SCHEMA/);
+  assert.match(
+    text(second, "src/app/app.component.ts"),
+    /CUSTOM_ELEMENTS_SCHEMA/,
+  );
 });
 
 test("configures an existing Native Federation Nx remote", async () => {
@@ -76,7 +86,10 @@ test("configures an existing Native Federation Nx remote", async () => {
     project.targets["serve-federation"].executor,
     "@angular-architects/native-federation:build",
   );
-  assert.match(text(result, "apps/demo/federation.config.mjs"), /"\.\/Component"/);
+  assert.match(
+    text(result, "apps/demo/federation.config.mjs"),
+    /"\.\/Component"/,
+  );
   assert.equal(result.exists("workspace.json"), false);
 });
 
@@ -223,10 +236,7 @@ function nxFixture() {
 
 function commonFiles(prefix, nativeFederation) {
   const tree = new HostTree();
-  tree.create(
-    "package.json",
-    JSON.stringify({ devDependencies: {} }, null, 2),
-  );
+  tree.create("package.json", JSON.stringify({ devDependencies: {} }, null, 2));
   tree.create(
     `${prefix}src/main.ts`,
     `import { bootstrapApplication } from "@angular/platform-browser";
@@ -298,9 +308,7 @@ function targets(nativeFederation, nx) {
       [key]: "@angular/build:application",
       options: {
         browser: nx ? "apps/demo/src/main.ts" : "src/main.ts",
-        polyfills: nx
-          ? ["apps/demo/src/polyfills.ts"]
-          : ["src/polyfills.ts"],
+        polyfills: nx ? ["apps/demo/src/polyfills.ts"] : ["src/polyfills.ts"],
       },
       configurations: {
         production: {},

@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/schema",
+  "$schema": "./node_modules/@angular-devkit/schematics/collection-schema.json",
   "schematics": {
     "setup": {
       "factory": "./dist/setup/index.js",
