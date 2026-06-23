@@ -192,6 +192,7 @@ export async function startHostGateway(options: HostGatewayOptions): Promise<Hos
 
   const server = await listen(app, options.gatewayPort);
   server.on("upgrade", (req, socket, head) => {
+    req.headers.host = `localhost:${options.appPort}`;
     proxy.ws(req, socket, head, { target: `http://localhost:${options.appPort}` });
   });
   const address = server.address();
