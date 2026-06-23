@@ -267,9 +267,25 @@ function configureProject(
     targets.serve = { [key]: sessionExecutor, options: executorOptions };
   }
 
+  // The remote's dev server is reached directly through the YATSI tunnel, which
+  // forwards the public Host header (e.g. `<sub>.tunnel.example.com`) unchanged.
+  // Native Federation leaves the dev server's `allowedHosts` at the default `[]`,
+  // so Vite answers 403 ("Blocked request. This host is not allowed.") for the
+  // tunnel host. The dev server only binds to localhost, so allowing every host
+  // is safe here and avoids needing to know the YATSI domain at setup time.
+  if (options.role === "remote") allowTunnelHostsOnDevServer(targets);
+
   writeProject(tree, location, projectName, project);
   if (options.role === "host") replaceRootTemplateWithStage(tree, project, options.component);
   else ensureComponentExposure(tree, project, options.component);
+}
+
+function allowTunnelHostsOnDevServer(targets: Record<string, Target>) {
+  for (const target of Object.values(targets)) {
+    if (executorOf(target) !== "@angular/build:dev-server") continue;
+    target.options ??= {};
+    target.options.allowedHosts = true;
+  }
 }
 
 function assertStandalone(tree: Tree, project: Project, componentOverride?: string) {

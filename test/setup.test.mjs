@@ -87,6 +87,27 @@ test("infers and configures the only Native Federation Nx remote", async () => {
   assert.equal(result.exists("workspace.json"), false);
 });
 
+test("allows tunnel hosts on the remote dev server", async () => {
+  const tree = angularFixture({ nativeFederation: true });
+  const result = await runner().runSchematic(
+    "setup",
+    {
+      project: "demo",
+      role: "remote",
+      remoteName: "demo",
+      skipInstall: true,
+    },
+    tree,
+  );
+  const project = json(result, "angular.json").projects.demo;
+
+  assert.equal(
+    project.architect["serve-original"].builder,
+    "@angular/build:dev-server",
+  );
+  assert.equal(project.architect["serve-original"].options.allowedHosts, true);
+});
+
 test("rejects role conversion without modifying the tree", async () => {
   const tree = angularFixture({ nativeFederation: true });
   const configured = await runner().runSchematic(
