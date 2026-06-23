@@ -13,19 +13,18 @@ const runner = () =>
     path.join(root, "collection.json"),
   );
 
-test("declares project as a named setup option", () => {
+test("declares project as an optional named setup option", () => {
   const schema = JSON.parse(
     readFileSync(path.join(root, "src/setup/schema.json"), "utf8"),
   );
 
   assert.equal(schema.properties.project.$default, undefined);
-  assert.deepEqual(schema.required, ["project", "role"]);
+  assert.deepEqual(schema.required, ["role"]);
 });
 
-test("configures an existing Native Federation host and is idempotent", async () => {
+test("infers and configures the only Native Federation host idempotently", async () => {
   const tree = angularFixture({ nativeFederation: true });
   const options = {
-    project: "demo",
     role: "host",
     yatsiServerUrl: "https://tunnel.example.com",
     skipInstall: true,
@@ -60,12 +59,11 @@ test("configures an existing Native Federation host and is idempotent", async ()
   );
 });
 
-test("configures an existing Native Federation Nx remote", async () => {
+test("infers and configures the only Native Federation Nx remote", async () => {
   const tree = nxFixture();
   const result = await runner().runSchematic(
     "setup",
     {
-      project: "demo",
       role: "remote",
       remoteName: "demo-remote",
       skipInstall: true,
