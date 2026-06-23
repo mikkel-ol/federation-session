@@ -129,9 +129,11 @@ async function mountRevision(item: MountedRemote, remote: RemoteState) {
     const componentUrl = new URL(exposure.outFileName, entry);
     componentUrl.searchParams.set("revision", String(remote.revision));
     const module = await importShim(componentUrl.href);
-    const component = module.AppComponent ?? module.default;
+    const component = resolveExposedComponent(module);
     if (!component) {
-      throw new Error("./Component does not export AppComponent or default");
+      throw new Error(
+        "./Component does not export an Angular component (looked for a default export, AppComponent, App, or any exported @Component class)",
+      );
     }
 
     const next = document.createElement("div");
@@ -154,6 +156,31 @@ async function mountRevision(item: MountedRemote, remote: RemoteState) {
 declare function importShim(
   specifier: string,
 ): Promise<Record<string, unknown>>;
+
+// The exposed "./Component" is just the remote's root component module, so the
+// export name follows whatever convention the remote uses. Older Angular apps
+// export `AppComponent` from app.component.ts; Angular's current generator
+// exports `App` from app.ts. Rather than chase names, prefer the conventional
+// exports and otherwise pick the first export that carries an Angular component
+// definition (the compiler stamps `ɵcmp` onto every @Component class).
+function resolveExposedComponent(
+  module: Record<string, unknown>,
+): unknown | undefined {
+  for (const preferred of [module.default, module.AppComponent, module.App]) {
+    if (isAngularComponent(preferred)) return preferred;
+  }
+  for (const value of Object.values(module)) {
+    if (isAngularComponent(value)) return value;
+  }
+  return undefined;
+}
+
+function isAngularComponent(value: unknown): boolean {
+  return (
+    typeof value === "function" &&
+    Object.prototype.hasOwnProperty.call(value, "ɵcmp")
+  );
+}
 
 function createPanel() {
   const root = document.createElement("aside");
