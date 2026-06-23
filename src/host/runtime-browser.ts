@@ -164,29 +164,20 @@ function createPanel() {
   const panel = document.createElement("div");
   panel.hidden = true;
   const invite = document.createElement("code");
-  const qr = document.createElement("img");
   const list = document.createElement("div");
-  panel.append(invite, qr, list);
+  panel.append(invite, list);
   root.append(toggle, panel);
   document.body.append(root);
   toggle.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
   });
 
-  let qrLoaded = false;
   return {
-    async update(session: SessionState) {
+    update(session: SessionState) {
       const fullInvite = token
         ? `${session.publicUrl}?join=${encodeURIComponent(token)}`
         : session.publicUrl;
       invite.textContent = fullInvite;
-      if (token && !qrLoaded) {
-        qrLoaded = true;
-        const response = await fetch("/__federation_session/invite-qr", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok) qr.src = URL.createObjectURL(await response.blob());
-      }
       list.replaceChildren(
         ...session.remotes.map((remote) => {
           const row = document.createElement("div");
@@ -226,7 +217,6 @@ federation-session-stage[data-default="true"] { display:grid;grid-template-colum
 .federation-session-panel>button { float:right }
 .federation-session-panel>div { clear:both;width:min(360px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:#fff;border:1px solid #aeb4bd;padding:12px;box-shadow:0 8px 30px #0002 }
 .federation-session-panel code { display:block;overflow-wrap:anywhere;margin-bottom:8px }
-.federation-session-panel img { display:block;width:180px;height:180px;margin:0 auto 8px }
 .federation-session-panel div div { display:flex;justify-content:space-between;gap:8px;padding:4px 0 }
 `;
 document.head.append(style);

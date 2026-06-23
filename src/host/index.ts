@@ -28,8 +28,15 @@ export default createBuilder<HostSchema>((options, context) => {
       apiKey,
     });
 
-    context.logger.info(`Federation session: ${redactInvite(gateway.inviteUrl)}`);
-    context.logger.info(`Session URL: ${gateway.inviteUrl}`);
+    const bold = "\x1b[1m";
+    const cyan = "\x1b[36m";
+    const dim = "\x1b[2m";
+    const reset = "\x1b[0m";
+    context.logger.info("");
+    context.logger.info(`  ${bold}Federation session is live${reset}`);
+    context.logger.info(`  ${dim}Send this URL to anyone joining the session:${reset}`);
+    context.logger.info(`  ${cyan}${bold}${gateway.inviteUrl}${reset}`);
+    context.logger.info("");
 
     if (options.open === true) {
       await open(`${gateway.localUrl}/#join=${encodeURIComponent(gateway.joinToken)}`);
@@ -49,9 +56,3 @@ export default createBuilder<HostSchema>((options, context) => {
     },
   );
 });
-
-function redactInvite(url: string) {
-  const parsed = new URL(url);
-  parsed.searchParams.set("join", "[redacted]");
-  return parsed.toString();
-}

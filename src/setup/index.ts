@@ -268,7 +268,7 @@ function configureProject(
   }
 
   writeProject(tree, location, projectName, project);
-  if (options.role === "host") addStageToRootComponent(tree, project, options.component);
+  if (options.role === "host") replaceRootTemplateWithStage(tree, project, options.component);
   else ensureComponentExposure(tree, project, options.component);
 }
 
@@ -312,7 +312,12 @@ function resolveComponentPath(
   throw new Error("Could not determine the root component; pass --component");
 }
 
-function addStageToRootComponent(
+// The host's own front page is irrelevant during a federation session: the page
+// only needs to render the session stage that mounts remote components. Rather
+// than appending the stage beside the existing UI, replace the root template
+// with the stage and preserve the original markup as a comment so it can be
+// restored when federation setup is removed.
+function replaceRootTemplateWithStage(
   tree: Tree,
   project: Project,
   componentOverride?: string,
@@ -336,12 +341,12 @@ function addStageToRootComponent(
     );
     const html = readText(tree, templatePath);
     if (!html.includes("<federation-session-stage")) {
-      tree.overwrite(templatePath, `${html.trimEnd()}\n\n<federation-session-stage></federation-session-stage>\n`);
+      tree.overwrite(templatePath, stageTemplate(html));
     }
   } else if (template && ts.isStringLiteralLike(template.initializer)) {
     const value = template.initializer.text;
     if (!value.includes("<federation-session-stage")) {
-      const replacement = `\`${escapeTemplateLiteral(value.trimEnd())}\\n\\n<federation-session-stage></federation-session-stage>\\n\``;
+      const replacement = `\`${escapeTemplateLiteral(stageTemplate(value))}\``;
       source =
         source.slice(0, template.initializer.getStart(parsed)) +
         replacement +
@@ -353,6 +358,23 @@ function addStageToRootComponent(
 
   source = addCustomElementsSchema(source, componentPath);
   tree.overwrite(componentPath, source);
+}
+
+// Produce a template that renders only the session stage, keeping the previous
+// markup commented out beneath it for reference.
+function stageTemplate(original: string): string {
+  const stage = "<federation-session-stage></federation-session-stage>";
+  const previous = original.trim();
+  if (!previous) return `${stage}\n`;
+  return (
+    `${stage}\n\n` +
+    `<!-- Original front page, replaced by Federation Session. Restore to bring it back.\n` +
+    `${escapeHtmlComment(previous)}\n-->\n`
+  );
+}
+
+function escapeHtmlComment(value: string): string {
+  return value.replaceAll("-->", "--&gt;");
 }
 
 function addCustomElementsSchema(source: string, filePath: string): string {

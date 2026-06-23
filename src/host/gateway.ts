@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { request as httpRequest, type Server as HttpServer } from "node:http";
 import express, { type Request, type Response } from "express";
 import httpProxy from "http-proxy";
-import QRCode from "qrcode";
 import { createGrantClient, tunnel, type Tunnel } from "@mikkel-ol/yatsi";
 import { runtimeSource } from "./runtime";
 
@@ -68,10 +67,6 @@ export async function startHostGateway(options: HostGatewayOptions): Promise<Hos
         .sort((a, b) => a.order - b.order)
         .map(publicRegistration),
     });
-  });
-
-  app.get(`${CONTROL_PREFIX}/invite-qr`, requireJoinToken(joinToken), async (_req, res) => {
-    res.type("image/svg+xml").send(await QRCode.toString(`${publicUrl}?join=${joinToken}`, { type: "svg" }));
   });
 
   app.post(`${CONTROL_PREFIX}/register`, requireJoinToken(joinToken), async (req, res) => {

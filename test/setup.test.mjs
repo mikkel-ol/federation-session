@@ -43,16 +43,12 @@ test("infers and configures the only Native Federation host idempotently", async
     project.architect["serve-federation"].builder,
     "@angular-architects/native-federation:build",
   );
-  assert.match(
-    text(second, "src/app/app.component.html"),
-    /<federation-session-stage><\/federation-session-stage>/,
-  );
-  assert.equal(
-    text(second, "src/app/app.component.html").match(
-      /federation-session-stage/g,
-    ).length,
-    2,
-  );
+  const html = text(second, "src/app/app.component.html");
+  assert.match(html, /<federation-session-stage><\/federation-session-stage>/);
+  assert.equal(html.match(/federation-session-stage/g).length, 2);
+  // The original front page is replaced and preserved as a comment.
+  assert.match(html, /<!--[\s\S]*<h1>Demo<\/h1>[\s\S]*-->/);
+  assert.doesNotMatch(html, /^\s*<h1>Demo<\/h1>/);
   assert.match(
     text(second, "src/app/app.component.ts"),
     /CUSTOM_ELEMENTS_SCHEMA/,
