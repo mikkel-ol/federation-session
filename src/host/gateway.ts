@@ -26,6 +26,8 @@ interface Registration {
   removalTimer?: NodeJS.Timeout;
 }
 
+type GrantClient = ReturnType<typeof createGrantClient>;
+
 export interface HostGatewayOptions {
   appPort: number;
   gatewayPort: number;
@@ -44,7 +46,6 @@ export interface HostGateway {
 }
 
 export async function startHostGateway(options: HostGatewayOptions): Promise<HostGateway> {
-  const app = express();
   const serverUrl = new URL(options.yatsiServerUrl);
   const joinToken = randomBytes(24).toString("base64url");
   const scope = randomUUID();
@@ -55,137 +56,18 @@ export async function startHostGateway(options: HostGatewayOptions): Promise<Hos
   let order = 0;
   let closing: Promise<void> | undefined;
 
-  app.use(express.json({ limit: "64kb" }));
-
-  app.get(`${CONTROL_PREFIX}/session`, (_req, res) => {
-    res.json({ publicUrl, slug: new URL(publicUrl).hostname.split(".")[0], capacity: options.capacity });
-  });
-
-  app.get(`${CONTROL_PREFIX}/state`, (_req, res) => {
-    res.setHeader("cache-control", "no-store");
-    res.json({
-      publicUrl,
-      remotes: [...registrations.values()]
-        .filter((registration) => registration.remoteEntry)
-        .sort((a, b) => a.order - b.order)
-        .map(publicRegistration),
-    });
-  });
-
-  app.post(`${CONTROL_PREFIX}/register`, requireJoinToken(joinToken), async (req, res) => {
-    if (!allowRegistration(req.ip || req.socket.remoteAddress || "unknown", registrationAttempts)) {
-      res.status(429).json({ error: "Too many registration attempts" });
-      return;
-    }
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(name)) {
-      res.status(400).json({ error: "Remote name must be lowercase kebab-case" });
-      return;
-    }
-    if (registrations.has(name)) {
-      res.status(409).json({ error: `Remote name '${name}' is already registered` });
-      return;
-    }
-    if (registrations.size >= options.capacity) {
-      res.status(409).json({ error: "Federation session is full" });
-      return;
-    }
-
-    const registration: Registration = {
-      name,
-      token: randomBytes(24).toString("base64url"),
-      status: "not ready",
-      revision: 0,
-      order: order++,
-      eventResponses: new Set(),
-    };
-    const grant = await grants.create({ scope, subject: name, expiresInSeconds: 60 });
-    registrations.set(name, registration);
-    res.status(201).json({ registrationToken: registration.token, grant });
-  });
-
-  app.get(`${CONTROL_PREFIX}/events`, (req, res) => {
-    const registration = registrationForRequest(req, registrations);
-    if (!registration) {
-      res.status(401).json({ error: "Invalid registration token" });
-      return;
-    }
-
-    clearTimeout(registration.removalTimer);
-    registration.removalTimer = undefined;
-    if (registration.remoteEntry) registration.status = "connected";
-    registration.eventResponses.add(res);
-    res.writeHead(200, {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-    });
-    res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
-
-    req.on("close", () => {
-      registration.eventResponses.delete(res);
-      if (registration.eventResponses.size > 0 || !registrations.has(registration.name)) return;
-      registration.status = "reconnecting";
-      registration.removalTimer = setTimeout(() => {
-        void removeRegistration(registration, registrations, grants, scope);
-      }, RECONNECT_MS);
-    });
-  });
-
-  app.post(`${CONTROL_PREFIX}/grant`, async (req, res) => {
-    const registration = registrationForRequest(req, registrations);
-    if (!registration) {
-      res.status(401).json({ error: "Invalid registration token" });
-      return;
-    }
-    const grant = await grants.create({ scope, subject: registration.name, expiresInSeconds: 60 });
-    res.json({ grant });
-  });
-
-  app.post(`${CONTROL_PREFIX}/revision`, async (req, res) => {
-    const registration = registrationForRequest(req, registrations);
-    if (!registration) {
-      res.status(401).json({ error: "Invalid registration token" });
-      return;
-    }
-
-    const remoteEntry = typeof req.body?.remoteEntry === "string" ? req.body.remoteEntry : "";
-    try {
-      await validateRemoteEntry(remoteEntry, registration.name, serverUrl);
-    } catch (error) {
-      res.status(400).json({ error: error instanceof Error ? error.message : "Remote entry is not ready" });
-      return;
-    }
-
-    registration.remoteEntry = remoteEntry;
-    registration.revision += 1;
-    registration.status = "connected";
-    res.json({ revision: registration.revision });
-  });
-
-  app.delete(`${CONTROL_PREFIX}/registration`, async (req, res) => {
-    const registration = registrationForRequest(req, registrations);
-    if (!registration) {
-      res.status(401).json({ error: "Invalid registration token" });
-      return;
-    }
-    await removeRegistration(registration, registrations, grants, scope);
-    res.status(204).end();
-  });
-
-  app.delete(`${CONTROL_PREFIX}/remotes/:name`, requireJoinToken(joinToken), async (req, res) => {
-    const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
-    const registration = registrations.get(name);
-    if (registration) await removeRegistration(registration, registrations, grants, scope);
-    res.status(204).end();
-  });
-
-  app.get(`${CONTROL_PREFIX}/runtime.js`, (_req, res) => {
-    res.type("text/javascript").send(runtimeSource());
-  });
-
-  app.use((req, res) => {
-    proxyHttp(options.appPort, options.panel, req, res);
+  const app = createHostControlApp({
+    appPort: options.appPort,
+    capacity: options.capacity,
+    panel: options.panel,
+    serverUrl,
+    joinToken,
+    scope,
+    registrations,
+    registrationAttempts,
+    grants,
+    publicUrl: () => publicUrl,
+    nextOrder: () => order++,
   });
 
   const server = await listen(app, options.gatewayPort);
@@ -228,6 +110,165 @@ export async function startHostGateway(options: HostGatewayOptions): Promise<Hos
   };
 }
 
+interface HostControlAppOptions {
+  appPort: number;
+  capacity: number;
+  panel: boolean;
+  serverUrl: URL;
+  joinToken: string;
+  scope: string;
+  registrations: Map<string, Registration>;
+  registrationAttempts: Map<string, { count: number; startedAt: number }>;
+  grants: GrantClient;
+  publicUrl(): string;
+  nextOrder(): number;
+}
+
+export function createHostControlApp(options: HostControlAppOptions): express.Express {
+  const app = express();
+
+  app.use(express.json({ limit: "64kb" }));
+
+  app.get(`${CONTROL_PREFIX}/session`, (_req, res) => {
+    const publicUrl = options.publicUrl();
+    res.json({ publicUrl, slug: new URL(publicUrl).hostname.split(".")[0], capacity: options.capacity });
+  });
+
+  app.get(`${CONTROL_PREFIX}/state`, (_req, res) => {
+    res.setHeader("cache-control", "no-store");
+    res.json({
+      publicUrl: options.publicUrl(),
+      remotes: [...options.registrations.values()]
+        .filter((registration) => registration.remoteEntry)
+        .sort((a, b) => a.order - b.order)
+        .map(publicRegistration),
+    });
+  });
+
+  app.post(`${CONTROL_PREFIX}/register`, requireJoinToken(options.joinToken), async (req, res) => {
+    if (!allowRegistration(req.ip || req.socket.remoteAddress || "unknown", options.registrationAttempts)) {
+      res.status(429).json({ error: "Too many registration attempts" });
+      return;
+    }
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(name)) {
+      res.status(400).json({ error: "Remote name must be lowercase kebab-case" });
+      return;
+    }
+
+    const existing = options.registrations.get(name);
+    if (existing?.status === "reconnecting") {
+      await removeRegistration(existing, options.registrations, options.grants, options.scope);
+    } else if (existing) {
+      res.status(409).json({ error: `Remote name '${name}' is already registered` });
+      return;
+    }
+
+    if (options.registrations.size >= options.capacity) {
+      res.status(409).json({ error: "Federation session is full" });
+      return;
+    }
+
+    const registration: Registration = {
+      name,
+      token: randomBytes(24).toString("base64url"),
+      status: "not ready",
+      revision: 0,
+      order: options.nextOrder(),
+      eventResponses: new Set(),
+    };
+    const grant = await options.grants.create({ scope: options.scope, subject: name, expiresInSeconds: 60 });
+    options.registrations.set(name, registration);
+    res.status(201).json({ registrationToken: registration.token, grant });
+  });
+
+  app.get(`${CONTROL_PREFIX}/events`, (req, res) => {
+    const registration = registrationForRequest(req, options.registrations);
+    if (!registration) {
+      res.status(401).json({ error: "Invalid registration token" });
+      return;
+    }
+
+    clearTimeout(registration.removalTimer);
+    registration.removalTimer = undefined;
+    if (registration.remoteEntry) registration.status = "connected";
+    registration.eventResponses.add(res);
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    });
+    res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+
+    req.on("close", () => {
+      registration.eventResponses.delete(res);
+      if (registration.eventResponses.size > 0 || !options.registrations.has(registration.name)) return;
+      registration.status = "reconnecting";
+      registration.removalTimer = setTimeout(() => {
+        void removeRegistration(registration, options.registrations, options.grants, options.scope);
+      }, RECONNECT_MS);
+    });
+  });
+
+  app.post(`${CONTROL_PREFIX}/grant`, async (req, res) => {
+    const registration = registrationForRequest(req, options.registrations);
+    if (!registration) {
+      res.status(401).json({ error: "Invalid registration token" });
+      return;
+    }
+    const grant = await options.grants.create({ scope: options.scope, subject: registration.name, expiresInSeconds: 60 });
+    res.json({ grant });
+  });
+
+  app.post(`${CONTROL_PREFIX}/revision`, async (req, res) => {
+    const registration = registrationForRequest(req, options.registrations);
+    if (!registration) {
+      res.status(401).json({ error: "Invalid registration token" });
+      return;
+    }
+
+    const remoteEntry = typeof req.body?.remoteEntry === "string" ? req.body.remoteEntry : "";
+    try {
+      await validateRemoteEntry(remoteEntry, registration.name, options.serverUrl);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Remote entry is not ready" });
+      return;
+    }
+
+    registration.remoteEntry = remoteEntry;
+    registration.revision += 1;
+    registration.status = "connected";
+    res.json({ revision: registration.revision });
+  });
+
+  app.delete(`${CONTROL_PREFIX}/registration`, async (req, res) => {
+    const registration = registrationForRequest(req, options.registrations);
+    if (!registration) {
+      res.status(401).json({ error: "Invalid registration token" });
+      return;
+    }
+    await removeRegistration(registration, options.registrations, options.grants, options.scope);
+    res.status(204).end();
+  });
+
+  app.delete(`${CONTROL_PREFIX}/remotes/:name`, requireJoinToken(options.joinToken), async (req, res) => {
+    const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
+    const registration = options.registrations.get(name);
+    if (registration) await removeRegistration(registration, options.registrations, options.grants, options.scope);
+    res.status(204).end();
+  });
+
+  app.get(`${CONTROL_PREFIX}/runtime.js`, (_req, res) => {
+    res.type("text/javascript").send(runtimeSource());
+  });
+
+  app.use((req, res) => {
+    proxyHttp(options.appPort, options.panel, req, res);
+  });
+
+  return app;
+}
+
 function publicRegistration(registration: Registration) {
   return {
     name: registration.name,
@@ -262,7 +303,7 @@ function bearerToken(req: Request): string | undefined {
 async function removeRegistration(
   registration: Registration,
   registrations: Map<string, Registration>,
-  grants: ReturnType<typeof createGrantClient>,
+  grants: GrantClient,
   scope: string,
 ) {
   registrations.delete(registration.name);
