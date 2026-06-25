@@ -38,7 +38,6 @@
   "dependencies": {
     "@mikkel-ol/yatsi": "^0.2.0",
     "express": "^4.21.2",
-    "http-proxy": "^1.18.1",
     "open": "^10.2.0",
     "rxjs": "^7.8.2"
   },
@@ -51,7 +50,6 @@
     "@mikkel-ol/yatsi": "file:../yatsi/packages/client",
     "@schematics/angular": "~22.0.2",
     "@types/express": "^5.0.0",
-    "@types/http-proxy": "^1.17.16",
     "@types/node": "^22.15.0",
     "esbuild": "^0.28.1",
     "typescript": "~6.0.3"

@@ -1,7 +1,11 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { request as httpRequest, type Server as HttpServer } from "node:http";
+import {
+  request as httpRequest,
+  type IncomingMessage,
+  type Server as HttpServer,
+} from "node:http";
+import type { Duplex } from "node:stream";
 import express, { type Request, type Response } from "express";
-import httpProxy from "http-proxy";
 import { createGrantClient, tunnel, type Tunnel } from "@mikkel-ol/yatsi";
 import { runtimeSource } from "./runtime";
 
@@ -41,7 +45,6 @@ export interface HostGateway {
 
 export async function startHostGateway(options: HostGatewayOptions): Promise<HostGateway> {
   const app = express();
-  const proxy = httpProxy.createProxyServer({ ws: true });
   const serverUrl = new URL(options.yatsiServerUrl);
   const joinToken = randomBytes(24).toString("base64url");
   const scope = randomUUID();
@@ -187,8 +190,7 @@ export async function startHostGateway(options: HostGatewayOptions): Promise<Hos
 
   const server = await listen(app, options.gatewayPort);
   server.on("upgrade", (req, socket, head) => {
-    req.headers.host = `localhost:${options.appPort}`;
-    proxy.ws(req, socket, head, { target: `http://localhost:${options.appPort}` });
+    proxyWebSocket(options.appPort, req, socket, head);
   });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Host gateway did not bind a TCP port");
@@ -382,6 +384,43 @@ function proxyHttp(port: number, panel: boolean, req: Request, res: Response) {
   );
   upstream.on("error", () => res.status(502).send("Host dev server is unavailable"));
   req.pipe(upstream);
+}
+
+function proxyWebSocket(port: number, req: IncomingMessage, socket: Duplex, head: Buffer) {
+  const upstream = httpRequest({
+    hostname: "localhost",
+    port,
+    path: req.url,
+    method: req.method,
+    headers: { ...req.headers, host: `localhost:${port}` },
+  });
+
+  upstream.on("upgrade", (upstreamResponse, upstreamSocket, upstreamHead) => {
+    socket.write(
+      `HTTP/1.1 ${upstreamResponse.statusCode ?? 101} ${upstreamResponse.statusMessage ?? "Switching Protocols"}\r\n`,
+    );
+    for (let index = 0; index < upstreamResponse.rawHeaders.length; index += 2) {
+      socket.write(`${upstreamResponse.rawHeaders[index]}: ${upstreamResponse.rawHeaders[index + 1]}\r\n`);
+    }
+    socket.write("\r\n");
+    if (upstreamHead.length > 0) socket.write(upstreamHead);
+    if (head.length > 0) upstreamSocket.write(head);
+
+    upstreamSocket.pipe(socket);
+    socket.pipe(upstreamSocket);
+  });
+
+  upstream.on("response", (upstreamResponse) => {
+    socket.write(
+      `HTTP/1.1 ${upstreamResponse.statusCode ?? 502} ${upstreamResponse.statusMessage ?? "Bad Gateway"}\r\n\r\n`,
+    );
+    upstreamResponse.resume();
+    socket.destroy();
+  });
+
+  upstream.on("error", () => socket.destroy());
+  socket.on("error", () => upstream.destroy());
+  upstream.end();
 }
 
 function listen(app: express.Express, port: number): Promise<HttpServer> {
