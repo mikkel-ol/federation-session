@@ -379,7 +379,7 @@ function replaceRootTemplateWithStage(
 // Produce a template that renders only the session stage, keeping the previous
 // markup commented out beneath it for reference.
 function stageTemplate(original: string): string {
-  const stage = "<federation-session-stage></federation-session-stage>";
+  const stage = '<federation-session-stage heading="Federated Session"></federation-session-stage>';
   const previous = original.trim();
   if (!previous) return `${stage}\n`;
   return (

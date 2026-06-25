@@ -44,7 +44,10 @@ test("infers and configures the only Native Federation host idempotently", async
     "@angular-architects/native-federation:build",
   );
   const html = text(second, "src/app/app.component.html");
-  assert.match(html, /<federation-session-stage><\/federation-session-stage>/);
+  assert.match(
+    html,
+    /<federation-session-stage heading="Federated Session"><\/federation-session-stage>/,
+  );
   assert.equal(html.match(/federation-session-stage/g).length, 2);
   // The original front page is replaced and preserved as a comment.
   assert.match(html, /<!--[\s\S]*<h1>Demo<\/h1>[\s\S]*-->/);

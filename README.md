@@ -30,3 +30,12 @@ ng serve participant --session-url https://session.tunnel.example.com?join=...
 The generator supports standalone Angular applications. It preserves an
 existing Native Federation setup or invokes Native Federation's official
 generator for plain Angular CLI applications.
+
+Host setup replaces the root template with a styled session stage:
+
+```html
+<federation-session-stage heading="Federated Session"></federation-session-stage>
+```
+
+Change the `heading` attribute or bind the `heading` property to rename the
+stage in the host application.
